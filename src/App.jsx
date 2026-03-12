@@ -31,13 +31,15 @@ import {
   User,
   Trash2,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { getHistoricalCabEstimate } from './services/cabDataService';
-import { fetchHotelRates, fetchTransitRates, fetchDiningRates, fetchItinerary } from './services/apiService';
+import { fetchHotelRates, fetchTransitRates, fetchDiningRates, fetchItinerary, fetchTopActivities } from './services/apiService';
 import CustomSelect from './components/CustomSelect';
 
 const TripPlanner = () => {
@@ -62,8 +64,12 @@ const TripPlanner = () => {
   const [estimates, setEstimates] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [userMode, setUserMode] = useState('student'); // Default to student
+  const [userMode, setUserMode] = useState('student');
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('nomad_theme');
+    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('nomad_user');
     return saved ? JSON.parse(saved) : null;
@@ -98,6 +104,12 @@ const TripPlanner = () => {
   useEffect(() => {
     localStorage.setItem('nomad_trips', JSON.stringify(tripHistory));
   }, [tripHistory]);
+
+  // Apply dark mode to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+    localStorage.setItem('nomad_theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   useEffect(() => {
     if (user) {
@@ -265,11 +277,12 @@ const TripPlanner = () => {
 
     try {
       // 1. Fetch live-simulated API data
-      const [transitData, stayData, diningData, itineraryData] = await Promise.all([
-        fetchTransitRates(formData.origin, formData.destination, formData.transportMode, formData.travelers, formData.tripType),
-        fetchHotelRates(formData.destination, formData.stayType, formData.duration, formData.travelers),
+      const [transitData, stayData, diningData, itineraryData, topActivities] = await Promise.all([
+        fetchTransitRates(formData.origin, formData.destination, formData.transportMode, formData.travelers, formData.tripType, formData.startDate),
+        fetchHotelRates(formData.destination, formData.stayType, formData.duration, formData.travelers, formData.startDate, formData.endDate),
         fetchDiningRates(formData.destination, formData.diningType, formData.duration, formData.travelers),
-        fetchItinerary(formData.destination, formData.travelStyle, formData.duration)
+        fetchItinerary(formData.destination, formData.travelStyle, formData.duration),
+        fetchTopActivities(formData.destination)
       ]);
 
       // 2. Fetch Historical Cab Database Data
@@ -298,11 +311,14 @@ const TripPlanner = () => {
         isOverBudget: total > formData.budget,
         metadata: {
           transitSource: transitData.source,
+          transitBreakdown: transitData.breakdown,
+          distanceKm: transitData.distanceKm,
           staySource: stayData.source,
           diningSource: diningData.source
         },
         recommendedHotels: stayData.recommendations,
         recommendedRestaurants: diningData.recommendations,
+        topActivities: topActivities,
         itinerary: itineraryData
       });
 
@@ -331,120 +347,136 @@ const TripPlanner = () => {
     <div className="app-layout">
       {/* Sidebar for Trip Iterations */}
       <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          {!isSidebarCollapsed && <div className="sidebar-title" style={{ margin: 0 }}>Recent Iterations</div>}
-          <button 
-            className="sidebar-toggle"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            <Menu size={20} />
-          </button>
-        </div>
-
-        {isSidebarCollapsed && (
-          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <History size={20} color="var(--text-muted)" />
+        {/* Sticky header */}
+        <div className="sidebar-inner">
+          <div className="sidebar-header">
+            {!isSidebarCollapsed && <div className="sidebar-title" style={{ margin: 0 }}>Recent Iterations</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                className="theme-toggle-btn"
+                onClick={() => setIsDarkMode(prev => !prev)}
+                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+              <button 
+                className="sidebar-toggle"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                <Menu size={20} />
+              </button>
+            </div>
           </div>
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {/* Planning Indicator - fixed icon container so it's same size as trip icons */}
-          {isPlanning && (
-            <div className="sidebar-item planning" style={{ borderColor: 'var(--secondary)', borderStyle: 'solid' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                  <div style={{ width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <PlusCircle size={20} color="var(--secondary)" className="spin-slow" />
-                  </div>
-                  {!isSidebarCollapsed && (
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>Planning...</div>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Drafting trip</div>
-                    </div>
-                  )}
-                </div>
-                {!isSidebarCollapsed && (
-                  <button 
-                    onClick={handleCancelPlanning}
-                    className="delete-trip-btn"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
+
+          {isSidebarCollapsed && (
+            <div style={{ textAlign: 'center' }}>
+              <History size={20} color="var(--text-muted)" />
             </div>
           )}
 
-          {tripHistory.map(trip => (
-            <div 
-              key={trip.id} 
-              className={`sidebar-item ${currentEditId === trip.id ? 'active' : ''}`}
-              onClick={() => handleEditTrip(trip)}
-              style={{ cursor: 'pointer', position: 'relative' }}
-              title={isSidebarCollapsed ? (trip.name || `${trip.dest} Trip`) : ''}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden', flex: 1 }}>
-                  <div style={{ width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {currentEditId === trip.id ? (
-                      <Compass size={20} color="var(--secondary)" className="spin-slow" />
-                    ) : (
-                      <FileText size={20} color="var(--text-muted)" />
+          {/* Scrollable trips list */}
+          <div className="sidebar-scroll">
+            {/* Planning Indicator */}
+            {isPlanning && (
+              <div className="sidebar-item planning" style={{ borderColor: 'var(--secondary)', borderStyle: 'solid' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                    <div style={{ width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <PlusCircle size={20} color="var(--secondary)" className="spin-slow" />
+                    </div>
+                    {!isSidebarCollapsed && (
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>Planning...</div>
+                        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Drafting trip</div>
+                      </div>
                     )}
                   </div>
                   {!isSidebarCollapsed && (
-                    <div style={{ overflow: 'hidden', flex: 1 }}>
-                      {editingTripId === trip.id ? (
-                        <input
-                          autoFocus
-                          className="trip-name-input"
-                          value={editingTripName}
-                          onChange={(e) => setEditingTripName(e.target.value)}
-                          onBlur={() => handleSaveRenameTrip(trip.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveRenameTrip(trip.id);
-                            if (e.key === 'Escape') setEditingTripId(null);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <div 
-                          style={{ fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                          onDoubleClick={(e) => handleStartRenameTrip(e, trip)}
-                          title="Double-click to rename"
-                        >
-                          {trip.name || `${trip.dest} Trip`}
-                        </div>
-                      )}
-                      <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>{trip.date}</div>
-                    </div>
-                  )}
-                </div>
-                
-                {!isSidebarCollapsed && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.85rem' }}>{trip.cost}</div>
                     <button 
-                      onClick={(e) => handleDeleteTrip(e, trip.id)}
+                      onClick={handleCancelPlanning}
                       className="delete-trip-btn"
                     >
                       <Trash2 size={16} />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          <button 
-            onClick={handleNewIteration}
-            className="sidebar-item" 
-            style={{ borderStyle: 'dashed', textAlign: 'center', opacity: 0.8, width: '100%' }}
-          >
-            {isSidebarCollapsed ? '+' : '+ New Iteration'}
-          </button>
+            )}
+
+            <button 
+              onClick={handleNewIteration}
+              className="sidebar-item" 
+              style={{ borderStyle: 'dashed', textAlign: 'center', opacity: 0.8, width: '100%', flexShrink: 0 }}
+            >
+              {isSidebarCollapsed ? '+' : '+ New Iteration'}
+            </button>
+
+            {tripHistory.map(trip => (
+              <div 
+                key={trip.id} 
+                className={`sidebar-item ${currentEditId === trip.id ? 'active' : ''}`}
+                onClick={() => handleEditTrip(trip)}
+                style={{ cursor: 'pointer', position: 'relative' }}
+                title={isSidebarCollapsed ? (trip.name || `${trip.dest} Trip`) : ''}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden', flex: 1 }}>
+                    <div style={{ width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {currentEditId === trip.id ? (
+                        <Compass size={20} color="var(--secondary)" className="spin-slow" />
+                      ) : (
+                        <FileText size={20} color="var(--text-muted)" />
+                      )}
+                    </div>
+                    {!isSidebarCollapsed && (
+                      <div style={{ overflow: 'hidden', flex: 1 }}>
+                        {editingTripId === trip.id ? (
+                          <input
+                            autoFocus
+                            className="trip-name-input"
+                            value={editingTripName}
+                            onChange={(e) => setEditingTripName(e.target.value)}
+                            onBlur={() => handleSaveRenameTrip(trip.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveRenameTrip(trip.id);
+                              if (e.key === 'Escape') setEditingTripId(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <div 
+                            style={{ fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            onDoubleClick={(e) => handleStartRenameTrip(e, trip)}
+                            title="Double-click to rename"
+                          >
+                            {trip.name || `${trip.dest} Trip`}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>{trip.date}</div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {!isSidebarCollapsed && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.85rem' }}>{trip.cost}</div>
+                      <button 
+                        onClick={(e) => handleDeleteTrip(e, trip.id)}
+                        className="delete-trip-btn"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
+        {/* Pinned footer: account + trip mode */}
+        <div className="sidebar-footer">
           {user ? (
             <div className={`sidebar-item profile ${isSidebarCollapsed ? 'collapsed' : ''}`} style={{ background: 'var(--input-bg)', borderColor: user.verifiedStudent ? 'var(--student-gold)' : 'var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', overflow: 'hidden' }}>
@@ -484,8 +516,8 @@ const TripPlanner = () => {
           )}
 
           {!isSidebarCollapsed && (
-            <div style={{ marginTop: '1.5rem' }}>
-              <div className="sidebar-title" style={{ marginBottom: '0.75rem' }}>Trip Mode</div>
+            <div style={{ marginTop: '1rem' }}>
+              <div className="sidebar-title" style={{ marginBottom: '0.5rem' }}>Trip Mode</div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 {userMode === 'student' 
                   ? "Comparing real-time student discounts across providers." 
@@ -495,6 +527,7 @@ const TripPlanner = () => {
           )}
         </div>
       </aside>
+
 
       <div className="app-container">
       {/* Dynamic Header */}
@@ -791,9 +824,13 @@ const TripPlanner = () => {
                         <div style={{ flexGrow: 1 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                             <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>Tickets & Travel</div>
-                            <div style={{ fontWeight: '700' }}>₹{estimates.transport}</div>
+                            <div style={{ fontWeight: '700' }}>₹{estimates.transport.toLocaleString()}</div>
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Intercity {formData.transportMode}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                            {estimates.metadata?.transitBreakdown
+                              ? estimates.metadata.transitBreakdown
+                              : `Intercity ${formData.transportMode}`}
+                          </div>
                           <div>
                             <a href={formData.transportMode === 'train' ? 'https://www.irctc.co.in/' : `https://www.makemytrip.com/${formData.transportMode}s`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.5rem' }}>
                               <ExternalLink size={12} /> Book {formData.transportMode}
@@ -910,7 +947,46 @@ const TripPlanner = () => {
                       </div>
                     )}
                   </div>
-                  </div>
+
+                  {/* Activities Card in Sidebar */}
+                  {estimates.topActivities && estimates.topActivities.length > 0 && (
+                    <div className="card animate-slide-up" style={{ animationDelay: '0.2s', marginTop: '1.5rem', background: 'var(--bg-card)', padding: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Compass size={18} />
+                        </div>
+                        <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Must-Visit Attractions</h2>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {estimates.topActivities.map((act, idx) => (
+                          <div key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                            <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+                              <img src={act.image} alt={act.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.25rem' }}>{act.title}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                {act.desc}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <a 
+                        href={`https://www.tripadvisor.com/Search?q=top+activities+in+${formData.destination}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="btn-secondary" 
+                        style={{ marginTop: '1.25rem', width: '100%', display: 'flex', justifyContent: 'center', padding: '0.6rem', fontSize: '0.875rem', color: 'var(--text-main)', textDecoration: 'none', border: '1px solid var(--border)', borderRadius: '8px' }}
+                      >
+                        Explore More <ExternalLink size={14} style={{ marginLeft: '0.5rem' }} />
+                      </a>
+                    </div>
+                  )}
+                </div>
+
                 <div className="right-col">
                   {/* Suggested Itinerary */}
                   <div className="card animate-slide-up" style={{ animationDelay: '0.3s' }}>
@@ -979,17 +1055,17 @@ const TripPlanner = () => {
           )}
         </AnimatePresence>
       </main>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up {
+          animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}} />
     </div>
-    <style dangerouslySetInnerHTML={{ __html: `
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-slide-up {
-        animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      }
-    `}} />
-    </div>
+  </div>
   );
 };
 

@@ -27,6 +27,15 @@ const taApi = axios.create({
   }
 });
 
+// Helper for RapidAPI IRCTC
+const irctcApi = axios.create({
+  baseURL: `https://irctc1.p.rapidapi.com/api/v1`,
+  headers: {
+    'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+    'x-rapidapi-host': 'irctc1.p.rapidapi.com'
+  }
+});
+
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'API is running and secure', branding: 'Nomad' });
@@ -63,6 +72,34 @@ app.post('/api/itinerary', async (req, res) => {
 });
 
 /**
+ * FETCH TOP ACTIVITIES (Gemini)
+ */
+app.get('/api/top-activities', async (req, res) => {
+  try {
+    const { destination } = req.query;
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `Identify 3 top must-visit activities or attractions for a tourist in ${destination}. 
+    Return the result ONLY as a JSON array of 3 objects. 
+    Each object must have:
+    - title (string, e.g., 'Gateway of India')
+    - desc (string, max 100 characters)
+    - image (string, a relevant high-quality Unsplash URL for this specific place).
+    If Unsplash URL is not known, use: https://images.unsplash.com/photo-1514222139-b57675ee0ed0?auto=format&fit=crop&q=80&w=400`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const jsonString = responseText.replace(/```json|```/gi, '').trim();
+    const activities = JSON.parse(jsonString);
+    
+    res.json(activities);
+  } catch (error) {
+    console.warn("Gemini Activities Error:", error.message);
+    res.status(500).json({ error: "Failed to fetch activities" });
+  }
+});
+
+/**
  * SEARCH LOCATION & HOTELS (TripAdvisor)
  */
 app.get('/api/search-location', async (req, res) => {
@@ -77,19 +114,58 @@ app.get('/api/search-location', async (req, res) => {
 
 app.get('/api/search-hotels', async (req, res) => {
   try {
-    const { locationId, adults } = req.query;
-    const response = await taApi.get('/searchHotels', {
-      params: { 
-        locationId,
-        adults: adults || '1',
-        currency: 'INR',
-        checkIn: '2026-06-01',
-        checkOut: '2026-06-05'
-      }
+    const { locationId, adults, stayType, checkIn, checkOut } = req.query;
+
+    // Map user preference to TripAdvisor subcategory filter
+    const subcategoryMap = {
+      hostel: 'HOSTEL',
+      budget: 'HOTEL',     // budget hotels
+      premium: 'HOTEL'     // premium hotels (filtered by price on client)
+    };
+
+    const params = {
+      locationId,
+      adults: adults || '1',
+      currency: 'INR',
+      checkIn:  checkIn  || new Date().toISOString().split('T')[0],
+      checkOut: checkOut || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    };
+
+    // Add subcategory filter for hostel requests
+    if (stayType === 'hostel') {
+      params.subcategory = subcategoryMap.hostel;
+    }
+
+    const response = await taApi.get('/searchHotels', { params });
+    res.json({ ...response.data, stayType }); // forward stayType for client-side refinement
+  } catch (error) {
+    console.error('Hotel search error:', error.message);
+    res.status(500).json({ error: "Hotel search failed" });
+  }
+});
+
+/**
+ * TRAIN STATION & SEARCH (Unofficial IRCTC API)
+ */
+app.get('/api/train-station', async (req, res) => {
+  try {
+    const { query } = req.query;
+    const response = await irctcApi.get('/searchStation', { params: { query } });
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: "Station search failed" });
+  }
+});
+
+app.get('/api/train-search', async (req, res) => {
+  try {
+    const { fromStationCode, toStationCode, dateOfJourney } = req.query;
+    const response = await irctcApi.get('/getTrainBetweenStations', {
+      params: { fromStationCode, toStationCode, dateOfJourney }
     });
     res.json(response.data);
   } catch (error) {
-    res.status(500).json({ error: "Hotel search failed" });
+    res.status(500).json({ error: "Train search failed" });
   }
 });
 

@@ -1,9 +1,10 @@
 :root {
-  --primary: #0f172a; /* Deep Midnight Blue */
+  --primary: #0f172a;
   --primary-hover: #1e293b;
-  --secondary: #ff5200; /* Nomad Vivid Orange */
+  --secondary: #ff5200;
   --bg-main: #f8fafc;
   --bg-card: #ffffff;
+  --bg-input: #ffffff;
   --text-main: #0f172a;
   --text-muted: #64748b;
   --text-light: #94a3b8;
@@ -13,6 +14,23 @@
   --sidebar-width: 280px;
   --student-gold: #f59e0b;
   --student-gold-soft: #fefce8;
+  --accent: #22c55e;
+}
+
+[data-theme="dark"] {
+  --primary: #e2e8f0;
+  --primary-hover: #cbd5e1;
+  --secondary: #ff6b35;
+  --bg-main: #0d1117;
+  --bg-card: #161b22;
+  --bg-input: #1e2530;
+  --text-main: #e2e8f0;
+  --text-muted: #8b9ab0;
+  --text-light: #64748b;
+  --border: #2d3748;
+  --input-bg: #1e2530;
+  --student-gold: #f59e0b;
+  --student-gold-soft: #1c1507;
   --accent: #22c55e;
 }
 
@@ -31,6 +49,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .app-container {
@@ -46,7 +65,7 @@ body {
 @media (min-width: 1024px) {
   .app-layout {
     display: flex;
-    max-width: 1440px;
+    max-width: 1600px;
     margin: 0 auto;
     padding: 2rem;
     gap: 2rem;
@@ -54,6 +73,7 @@ body {
 
   .app-container {
     flex: 1;
+    min-width: 0;
     max-width: none;
     margin: 0;
     border-radius: 1.5rem;
@@ -80,7 +100,8 @@ body {
 @media (min-width: 1024px) {
   .desktop-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 360px 1fr;
+    gap: 2rem;
     align-items: start;
   }
 
@@ -99,13 +120,18 @@ body {
 /* Header */
 .app-header {
   padding: 1.5rem 1.5rem 1rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(var(--bg-card-rgb, 255, 255, 255), 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 10;
   border-bottom: 1px solid var(--border);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+[data-theme="dark"] .app-header {
+  background: rgba(22, 27, 34, 0.85);
 }
 
 .app-header h1 {
@@ -185,7 +211,7 @@ h2 {
 
 input, select {
   width: 100%;
-  background: white;
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 2rem;
   padding: 0.5rem 0.75rem;
@@ -204,7 +230,7 @@ select {
 }
 
 input:hover, select:hover {
-  background: white;
+  background: var(--bg-input);
   border-color: var(--secondary);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
   transform: translateY(-1px);
@@ -212,11 +238,11 @@ input:hover, select:hover {
 
 .student input:hover, .student select:hover {
   border-color: var(--student-gold);
-  background: white;
+  background: var(--bg-input);
 }
 
 input:focus, select:focus {
-  background: white;
+  background: var(--bg-input);
   border-color: var(--secondary);
   box-shadow: 0 0 0 3px rgba(255, 82, 0, 0.1);
   transform: translateY(-1px);
@@ -289,7 +315,7 @@ input:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem;
-  background: white;
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.6rem 0.75rem;
@@ -350,13 +376,13 @@ input:focus, select:focus {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  background: white;
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 6px;
   box-shadow: 
-    0 10px 40px rgba(0, 0, 0, 0.08),
-    0 2px 10px rgba(0, 0, 0, 0.04);
+    0 10px 40px rgba(0, 0, 0, 0.15),
+    0 2px 10px rgba(0, 0, 0, 0.08);
   z-index: 1000;
   animation: dropdownSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   max-height: 220px;
@@ -406,7 +432,7 @@ input:focus, select:focus {
 }
 
 .custom-select__option:hover {
-  background: #f3f4f6;
+  background: var(--input-bg);
 }
 
 .custom-select__option--selected {
@@ -603,23 +629,73 @@ input::placeholder {
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
+  flex-shrink: 0;
   background: var(--bg-card);
   border-radius: 1.5rem;
   border: 1px solid var(--border);
-  padding: 1.5rem;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
   height: calc(100vh - 4rem);
   position: sticky;
   top: 2rem;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s, opacity 0.3s;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s, opacity 0.3s, background-color 0.3s, border-color 0.3s;
   overflow: hidden;
+}
+
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 1.5rem;
+  gap: 1.25rem;
+  overflow: hidden;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.sidebar-footer {
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
 }
 
 .sidebar.collapsed {
   width: 80px;
+  padding: 0;
+}
+
+.sidebar.collapsed .sidebar-inner {
   padding: 1rem 0.75rem;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-header {
@@ -934,4 +1010,34 @@ input::placeholder {
 
 .student .trip-name-input {
   border-bottom-color: var(--student-gold);
+}
+
+/* ═══════════════════════════════════════════
+   Theme Toggle Button
+═══════════════════════════════════════════ */
+.theme-toggle-btn {
+  width: 32px;
+  height: 32px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-main);
+  border-color: var(--secondary);
+  color: var(--secondary);
+  transform: scale(1.1);
+}
+
+[data-theme="dark"] .theme-toggle-btn:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
 }
